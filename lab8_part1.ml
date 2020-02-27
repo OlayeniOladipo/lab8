@@ -96,22 +96,42 @@ module MakeInterval (Endpoint : ORDERED_TYPE) =
        `high` inclusive. If `low` is greater than `high`, then the
        interval is empty. *)
     let create (low : Endpoint.t) (high : Endpoint.t) : interval =
-      failwith "create not implemented"
+      if Endpoint.compare low high > 0 then Empty
+      else Interval (low, high)
 
     (* is_empty intvl -- Returns true if and only if `intvl` is
        empty *)
     let is_empty (intvl : interval) : bool =
-      failwith "is_empty not implemented"
+      match intvl with
+      | Empty -> true
+      | _ -> false
 
     (* contains intvl x -- Returns true if and only if the value `x`
        is contained within `intvl` *)
     let contains (intvl : interval) (x : Endpoint.t) : bool =
-      failwith "contains not implemented"
+      match intvl with
+      | Interval (a, b) -> Endpoint.compare x a > 0 && Endpoint.compare x b < 0
+      | Empty -> false
 
     (* intersect intvl1 intvl2 -- Returns the intersection of `intvl1`
-       and `intvl2` *)
+       and `intvl2`
+       
+       2 - 6
+       8 - 10
+
+       2 - 6
+       3 - 8
+
+       2 - 6
+       1 - 4
+       *)
     let intersect (intvl1 : interval) (intvl2 : interval) : interval =
-      failwith "intersect not implemented"
+      match intvl1, intvl2 with
+      | Interval (a, b), Interval (c, d) -> let start = if contains intvl1 c then c else a
+                                             in 
+                                            let endd = if contains intvl1 d then b else d
+                                            in create start endd 
+      | _ -> Empty
     end ;;
 
 (*......................................................................
@@ -119,17 +139,22 @@ Exercise 1B: Using the completed functor above, instantiate an integer
 interval module.
 ......................................................................*)
 
-module IntInterval = struct end ;;
+module IntInterval = 
+  MakeInterval (struct
+    type t = int
+    let compare = Int.compare 
+  end)
+  ;;
 
 (*......................................................................
 Exercise 1C: Using your newly created integer interval module, create
 two non-empty intervals named `intvl1` and `intvl2` that have some
 overlap, and calculate their intersection as `intvl1_intersect_intvl2`.
 ......................................................................*)
-
-let intvl1 = failwith "not implemented" ;;
-let intvl2 = failwith "not implemented" ;;
-let intvl1_intersect_intvl2 = failwith "not implemented" ;;
+open IntInterval ;;
+let intvl1 = create 1 5 ;;
+let intvl2 = create 2 4 ;;
+let intvl1_intersect_intvl2 = intersect intvl1 intvl2 ;;
 
 (* There's currently a problem with the `MakeInterval` functor. It's
 not abstract enough. Notably we are working with an invariant that a
