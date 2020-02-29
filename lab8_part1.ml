@@ -104,13 +104,15 @@ module MakeInterval (Endpoint : ORDERED_TYPE) =
     let is_empty (intvl : interval) : bool =
       match intvl with
       | Empty -> true
-      | _ -> false
+      | Interval _ -> false
 
     (* contains intvl x -- Returns true if and only if the value `x`
        is contained within `intvl` *)
     let contains (intvl : interval) (x : Endpoint.t) : bool =
       match intvl with
-      | Interval (a, b) -> Endpoint.compare x a > 0 && Endpoint.compare x b < 0
+      | Interval (a, b) -> 
+        Endpoint.compare x a > 0 
+        && Endpoint.compare x b < 0
       | Empty -> false
 
     (* intersect intvl1 intvl2 -- Returns the intersection of `intvl1`
@@ -125,13 +127,23 @@ module MakeInterval (Endpoint : ORDERED_TYPE) =
        2 - 6
        1 - 4
        *)
-    let intersect (intvl1 : interval) (intvl2 : interval) : interval =
+    (* let intersect (intvl1 : interval) (intvl2 : interval) : interval =
       match intvl1, intvl2 with
       | Interval (a, b), Interval (c, d) -> let start = if contains intvl1 c then c else a
                                              in 
                                             let endd = if contains intvl1 d then b else d
                                             in create start endd 
       | _ -> Empty
+    end ;; *)
+
+    let intersect (intvl1 : interval) (intvl2 : interval) : interval =
+      let ordered x y = if Endpoint.compare x y <= 0 then x, y else y, x in
+      match intvl1, intvl2 with
+      | Empty, _
+      | _, Empty -> Empty
+      | Interval (low1, high1), Interval (low2, high2) ->
+         let (_, low), (high, _)  = ordered low1 low2, ordered high1 high2 in
+         create low high
     end ;;
 
 (*......................................................................
@@ -142,7 +154,7 @@ interval module.
 module IntInterval = 
   MakeInterval (struct
     type t = int
-    let compare = Int.compare 
+    let compare = Stdlib.compare 
   end)
   ;;
 
@@ -154,7 +166,7 @@ overlap, and calculate their intersection as `intvl1_intersect_intvl2`.
 open IntInterval ;;
 let intvl1 = create 1 5 ;;
 let intvl2 = create 2 4 ;;
-let intvl1_intersect_intvl2 = intersect intvl1 intvl2 ;;
+let intvl1_intersect_intvl2 = IntInterval.intersect intvl1 intvl2 ;;
 
 (* There's currently a problem with the `MakeInterval` functor. It's
 not abstract enough. Notably we are working with an invariant that a
@@ -190,7 +202,10 @@ module type INTERVAL =
   sig 
     type interval
     type endpoint
-    (* ... complete the interface here ... *)
+    val create : endpoint -> endpoint -> interval
+    val is_empty : interval -> bool
+    val contains : interval -> endpoint -> bool
+    val intersect : interval -> interval -> interval
   end ;;
 
 (*......................................................................
@@ -200,9 +215,46 @@ INTERVAL signature. (Much of the implementation can be copied from
 MakeInterval above.) **Don't forget to specify the module type.**
 ......................................................................*)
 
-module MakeSafeInterval (Endpoint : ORDERED_TYPE) =
+module MakeSafeInterval (Endpoint : ORDERED_TYPE) : INTERVAL =
   struct
-    (* ... complete the module implementation here ... *)
+      type endpoint = Endpoint.t
+      type interval =
+        | Interval of endpoint * endpoint
+        | Empty
+  
+      (* create low high -- Returns a new interval covering `low` to
+         `high` inclusive. If `low` > `high`, then the interval is
+         empty. *)
+      let create (low : endpoint) (high : endpoint) : interval =
+        if Endpoint.compare low high > 0 then Empty
+        else Interval (low, high)
+  
+      (* is_empty intvl -- Returns true if and only if the `intvl` is
+         empty *)
+      let is_empty (intvl : interval) : bool =
+        match intvl with
+        | Empty -> true
+        | Interval _ -> false
+  
+      (* contains intvl x -- Returns true if and only if the value `x`
+         is contained within `intvl` *)
+      let contains (intvl : interval) (x : Endpoint.t) : bool =
+        match intvl with
+        | Empty -> false
+        | Interval (low, high) ->
+           Endpoint.compare x low >= 0
+           && Endpoint.compare x high <= 0
+  
+      (* intersect intvl1 intvl2 -- Returns the intersection of the two
+         input intervals *)
+      let intersect (intvl1 : interval) (intvl2 : interval) : interval =
+        let ordered x y = if Endpoint.compare x y <= 0 then x, y else y, x in
+        match intvl1, intvl2 with
+        | Empty, _
+        | _, Empty -> Empty
+        | Interval (low1, high1), Interval (low2, high2) ->
+           let (_, low), (high, _)  = ordered low1 low2, ordered high1 high2 in
+           create low high
   end ;;
 
 (* We have successfully made our returned module abstract, but believe
@@ -215,7 +267,12 @@ Exercise 2C: Create an IntSafeInterval module using the new
 MakeSafeInterval functor.
 ......................................................................*)
 
-module IntSafeInterval = struct end ;;
+module IntSafeInterval =
+ MakeSafeInterval
+(struct 
+  type t = int 
+  let compare = Stdlib.compare
+end) ;;
 
 (* Now, try evaluating the following expression in the REPL:
 
@@ -262,7 +319,48 @@ module satisfying INTERVAL *with appropriate sharing constraints
 to allow the creation of generic interval modules*.
 ......................................................................*)
 
-(* ... place your implementation of the MakeBestInterval functor here ... *)
+module MakeBestInterval (Endpoint : ORDERED_TYPE)
+                      : (INTERVAL with type endpoint = Endpoint.t) = 
+  struct
+    type endpoint = Endpoint.t
+    type interval = | Interval of endpoint * endpoint
+                    | Empty
+
+    (* create low high -- Returns a new interval covering `low` to
+       `high` inclusive. If `low` > `high`, then the interval is
+       empty. *)
+    let create (low : endpoint) (high : endpoint) : interval =
+      if Endpoint.compare low high > 0 then Empty
+      else Interval (low, high)
+
+    (* is_empty intvl -- Returns true if and only if the `intvl` is
+       empty *)
+    let is_empty (intvl : interval) : bool =
+      match intvl with
+      | Empty -> true
+      | Interval _ -> false
+
+    (* contains intvl x -- Returns true if and only if the value `x`
+       is contained within `intvl` *)
+    let contains (intvl : interval) (x : Endpoint.t) : bool =
+      match intvl with
+      | Empty -> false
+      | Interval (low, high) ->
+         Endpoint.compare x low >= 0
+         && Endpoint.compare x high <= 0
+
+    (* intersect intvl1 intvl2 -- Returns the intersection of the two
+       input intervals *)
+    let intersect (intvl1 : interval) (intvl2 : interval) : interval =
+      let ordered x y = if Endpoint.compare x y <= 0 then x, y else y, x in
+      match intvl1, intvl2 with
+      | Empty, _
+      | _, Empty -> Empty
+      | Interval (low1, high1), Interval (low2, high2) ->
+         let (_, low), (high, _)  = ordered low1 low2, ordered high1 high2 in
+         create low high
+  end
+;;
 
 (* We now have a fully functioning functor that can create interval
 modules of whatever type we want, with the appropriate abstraction
@@ -284,4 +382,10 @@ instead?
     IntBestInterval.is_empty (IntBestInterval.Interval (4, 3)) ;;
 ......................................................................*)
 
-module IntBestInterval = struct end ;;
+module IntBestInterval =
+  MakeBestInterval
+    (struct 
+      type t = int 
+      let compare = Stdlib.compare
+    end) ;;
+
